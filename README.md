@@ -95,8 +95,8 @@ gcloud dns record-sets transaction add 199.36.153.8 199.36.153.9 199.36.153.10 1
   --name "private.${DOMAIN}." --ttl 300 --type A --zone "${UDOMAIN}"
 
 # create the CNAME record
-gcloud dns record-sets transaction add \
-  "private.${DOMAIN}." --name \*.${DOMAIN}. --ttl 300 --type CNAME --zone ${UDOMAIN}
+gcloud dns record-sets transaction add "private.${DOMAIN}." \
+  --name \*.${DOMAIN}. --ttl 300 --type CNAME --zone ${UDOMAIN}
 
 gcloud dns record-sets transaction execute --zone "${UDOMAIN}"
 ```
@@ -169,8 +169,8 @@ export PROXY_IMAGE_URL=${REPO_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/
 export CLOUD_RUN_SVC_NAME="deploy-proxy"
 export VPC_CONNECTOR_NAME="cloud-run-connector"
 
-gcloud run deploy ${CLOUD_RUN_SVC_NAME} --image ${CLOUDRUN_IMAGE_URL} \
-  --port 8000 --set-env-vars "PROJECT_ID=${PROJECT_ID}","ZONE=${GKE_ZONE}","GKE_CLUSTER_NAME=${GKE_NAME}","K8S_API_PROXY_IMAGE=${PROXY_IMAGE_URL}" \
+gcloud run deploy ${CLOUD_RUN_SVC_NAME} --image ${CLOUDRUN_IMAGE_URL} --port 8000 \
+  --set-env-vars "PROJECT_ID=${PROJECT_ID}","ZONE=${GKE_ZONE}","GKE_CLUSTER_NAME=${GKE_NAME}","K8S_API_PROXY_IMAGE=${PROXY_IMAGE_URL}" \
   --vpc-connector ${VPC_CONNECTOR_NAME} --vpc-egress all-traffic \
   --platform managed --region ${GKE_REGION} --ingress all
 ```
