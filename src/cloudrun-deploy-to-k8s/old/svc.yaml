@@ -13,5 +13,5 @@ spec:
     protocol: TCP
     targetPort: 8118
   selector:
-    run: k8s-api-proxy
+    app: k8s-api-proxy
   type: LoadBalancer

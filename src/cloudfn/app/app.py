@@ -6,7 +6,6 @@ deployment to a gke cluster
 from tempfile import NamedTemporaryFile
 import base64
 import os
-from flask import Flask, json, Response
 from google.cloud import container_v1
 import googleapiclient.discovery
 import kubernetes
@@ -80,23 +79,6 @@ def update_image(manifest):
     return manifest
 
 
-app = Flask(__name__)
-
-
-@app.route('/status', methods=['GET'])
-def get_status():
-    """ Return HTTP Code 200 """
-    data = {
-        'status': 'up',
-    }
-    jsn = json.dumps(data)
-
-    resp = Response(jsn, status=200, mimetype='application/json')
-
-    return resp
-
-
-@app.route('/')
 def deploy_to_k8s():
     """ Return a success string"""
     api = kubernetes_api()
@@ -180,7 +162,6 @@ def deploy_to_k8s():
     return "success"
 
 
-@app.route('/del')
 def del_from_k8s():
     """ Return a simple string"""
     api = kubernetes_api()
@@ -198,7 +179,6 @@ def del_from_k8s():
     return "success"
 
 
-@app.route('/get_svc_ip')
 def get_k8s_svc_ip():
     """ Return ip as a string"""
     api = kubernetes_api()
@@ -209,6 +189,14 @@ def get_k8s_svc_ip():
     return service_info.status.loadBalancer.ingress[0].ip
 
 
-if __name__ == "__main__":
-    # app.run(debug=True)
-    app.run(host="0.0.0.0", port=8000)
+def main(event, context):
+    """ Main Entry point for the cloudfunction"""
+    print(
+        """This Function was triggered by messageId {} published at {} to {}""".
+        format(context.event_id, context.timestamp, context.resource["name"]))
+
+    if 'data' in event:
+        name = base64.b64decode(event['data']).decode('utf-8')
+    else:
+        name = 'World'
+    print('Hello {}!'.format(name))

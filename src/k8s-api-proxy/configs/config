@@ -1,3 +1,5 @@
+# enable debugging
+debug 2
 #config directory
 confdir /etc/privoxy
 # Allow Kubernetes API access only

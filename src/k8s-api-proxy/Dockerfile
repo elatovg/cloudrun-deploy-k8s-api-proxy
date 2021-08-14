@@ -10,7 +10,8 @@ ADD --chown=privoxy:privoxy configs/k8s-only.action \
 ADD --chown=privoxy:privoxy configs/k8s-rewrite-internal.filter \
     /etc/privoxy/
 ADD configs/k8s-api-proxy.sh /
+RUN chmod +x /k8s-api-proxy.sh
 
 EXPOSE 8118/tcp
 
-ENTRYPOINT ["/bin/sh /k8s-api-proxy.sh"]
+ENTRYPOINT ["./k8s-api-proxy.sh"]

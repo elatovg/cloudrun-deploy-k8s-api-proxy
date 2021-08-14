@@ -1,0 +1,4 @@
+flask
+kubernetes
+google-api-python-client
+google-cloud-container

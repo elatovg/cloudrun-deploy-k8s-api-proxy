@@ -1,6 +1,7 @@
-# cloudrun-deploy-k8s-api-proxy
+# cloud{run,fn}-deploy-k8s-api-proxy
 
-## confirm your base images exist
+## Base Config
+### confirm your base images exist
 GCR [Mirrors dockerhub](https://cloud.google.com/container-registry/docs/pulling-cached-images)
 
 ```bash
@@ -14,37 +15,31 @@ Also list the tags to see which one you want to build from (for example):
 gcloud container images list-tags mirror.gcr.io/library/python
 ```
 
-## create artifact repo
+### create artifact repo
 
 ```bash
 gcloud services enable \
   artifactregistry.googleapis.com
 
-export REGION=us-east4
+export REPO_REGION=us-east4
 export REPO_NAME=tools
 gcloud -q artifacts repositories create ${REPO_NAME} \
   --repository-format docker --location ${REGION}
 ```
 
-## build the container using cloud build
+### build the container using cloud build
 ```bash
+gcloud services enable cloudbuild.googleapis.com
 gcloud builds submit . --config=cloudbuild-proxy.yaml
 
 # confirm the container is built
 export PROJECT_ID=$(gcloud config list --format "value(core.project)")
 export PROXY_IMAGE=k8s-api-proxy
-export PROXY_IMAGE_URL=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE}
+export PROXY_IMAGE_URL=${REPO_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${IMAGE}
 gcloud artifacts docker images list ${PROXY_IMAGE_URL}
 ```
 
-## Build an image for cloud run
-Some instructions are covered [here](https://cloud.google.com/run/docs/quickstarts/build-and-deploy/python):
-
-```bash
-gcloud builds submit . --config=cloudbuild-cloudrun.yaml
-```
-
-## Deploy a vpc connector for cloud run
+### Deploy a vpc connector for serverless
 More info [here](https://cloud.google.com/vpc/docs/configure-serverless-vpc-access). First let's create a dedicated subnet for the vpc connector:
 
 ```bash
@@ -55,6 +50,7 @@ export VPC_NAME="spoke"
 export SUBNET_CIDR="10.12.0.0/28"
 gcloud compute networks subnets create ${SUBNET} \
   --network ${VPC_NAME} --range ${SUBNET_CIDR} \
+  --enable-private-ip-google-access \
   --region ${REGION}
 ```
 
@@ -64,13 +60,103 @@ Now let's create the connector:
 gcloud services enable vpcaccess.googleapis.com
 export VPC_CONNECTOR_NAME="cloud-run-connector"
 
-gcloud compute networks vpc-access connectors create ${VPC_CONNECTOR_NAME} \
---region ${REGION} \
---subnet ${SUBNET} \
---subnet-project HOST_PROJECT_ID \
+gcloud compute networks vpc-access connectors create ${VPC_CONNECTOR_NAME} --region ${REGION} \
+--subnet ${SUBNET} --subnet-project HOST_PROJECT_ID \
 ```
 
-## Deploy a container to cloud run
+Add the subnet to the authorized networks for the GKE cluster:
+
+```bash
+export GKE_NAME="private-cluster"
+gcloud container clusters update ${GKE_NAME} \
+    --enable-master-authorized-networks \
+    --master-authorized-networks ${SUBNET_CIDR}
+```
+
+### Enable private google access for googleapis.com
+First create the dns zone:
+
+```bash
+export DOMAIN="googleapis.com"
+export UDOMAIN="${DOMAIN//./-}"
+export VPC_NAME="spoke"
+
+# create the zone
+gcloud dns managed-zones \
+  create ${UDOMAIN} --description "" \
+  --dns-name "${DOMAIN}." --visibility "private" \
+  --networks "${VPC_NAME}"
+
+
+gcloud dns record-sets transaction start --zone ${UDOMAIN}
+
+# create the A record
+gcloud dns record-sets transaction add 199.36.153.8 199.36.153.9 199.36.153.10 199.36.153.11 \
+  --name "private.${DOMAIN}." \
+  --ttl 300 --type A --zone "${UDOMAIN}"
+
+# create the CNAME record
+gcloud dns record-sets transaction add \
+  "private.${DOMAIN}." --name \*.${DOMAIN}. \
+  --ttl 300 --type CNAME --zone ${UDOMAIN}
+
+gcloud dns record-sets transaction execute --zone "${UDOMAIN}"
+```
+
+Now let's create the dns zone for artifact registry:
+
+
+```bash
+export DOMAIN="pkg.dev"
+export UDOMAIN="${DOMAIN//./-}"
+export VPC_NAME="spoke"
+
+# create the zone
+gcloud dns managed-zones \
+  create ${UDOMAIN} --description "" \
+  --dns-name "${DOMAIN}." --visibility "private" \
+  --networks "${VPC_NAME}"
+
+
+gcloud dns record-sets transaction start --zone ${UDOMAIN}
+
+# create the A record
+gcloud dns record-sets transaction add 199.36.153.8 199.36.153.9 199.36.153.10 199.36.153.11 \
+  --name "${DOMAIN}." \
+  --ttl 300 --type A --zone "${UDOMAIN}"
+
+# create the CNAME record
+gcloud dns record-sets transaction add \
+  "${DOMAIN}." --name \*.${DOMAIN}. \
+  --ttl 300 --type CNAME --zone ${UDOMAIN}
+
+gcloud dns record-sets transaction execute --zone "${UDOMAIN}"
+```
+
+If you don't a route to the default-internet-gateway for the DNS servers, add them:
+
+```bash
+export VPC_NAME="spoke"
+gcloud compute routes create access-googleapis \
+    --network ${VPC_NAME} --destination-range 199.36.153.8/30 \
+    --next-hop-gateway default-internet-gateway \
+    --priority 90
+```
+
+### Create a pubsub topic
+```bash
+gcloud pubsub topics create k8s-api-proxy
+```
+
+## Cloud Run Approach
+### Build an image for cloud run
+Some instructions are covered [here](https://cloud.google.com/run/docs/quickstarts/build-and-deploy/python):
+
+```bash
+gcloud builds submit . --config=cloudbuild-cloudrun.yaml
+```
+
+### Deploy a container to cloud run
 This should take care of it:
 
 ```bash
@@ -81,11 +167,12 @@ export GKE_NAME="private-cluster"
 export GKE_REGION="us-central1"
 export GKE_ZONE="${GKE_REGION}-c"
 export PROJECT_ID=$(gcloud config list --format "value(core.project)")
-export CLOUDRUN_IMAGE=cloudrun-deploy-to-k8s
+export CLOUDRUN_IMAGE="cloudrun-deploy-to-k8s"
 export CLOUDRUN_IMAGE_URL=${REPO_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${CLOUDRUN_IMAGE}
-export PROXY_IMAGE=k8s-api-proxy
-export PROXY_IMAGE_URL=${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${PROXY_IMAGE}
+export PROXY_IMAGE="k8s-api-proxy"
+export PROXY_IMAGE_URL=${REPO_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${PROXY_IMAGE}
 export CLOUD_RUN_SVC_NAME="deploy-proxy"
+export VPC_CONNECTOR_NAME="cloud-run-connector"
 
 gcloud run deploy ${CLOUD_RUN_SVC_NAME} --image ${CLOUDRUN_IMAGE_URL} \
   --port 8000 --set-env-vars "PROJECT_ID=${PROJECT_ID}","ZONE=${GKE_ZONE}","GKE_CLUSTER_NAME=${GKE_NAME}","K8S_API_PROXY_IMAGE=${PROXY_IMAGE_URL}" \
@@ -95,3 +182,26 @@ gcloud run deploy ${CLOUD_RUN_SVC_NAME} --image ${CLOUDRUN_IMAGE_URL} \
   --region ${GKE_REGION} \
   --ingress all
 ```
+
+That will show you the link for the cloudrun instance, then you can run the following to kick it off:
+
+```bash
+curl https://deploy-proxy-s7g6cfdg5q-uc.a.run.app
+success%
+```
+
+Wait a couple of minutes and get the IP of the ILB:
+
+```bash
+curl https://deploy-proxy-s7g6cfdg5q-uc.a.run.app/get_svc_ip
+10.150.0.13%
+```
+
+If you want you can also delete the deployment:
+
+```bash
+curl https://deploy-proxy-s7g6cfdg5q-uc.a.run.app/del
+success%
+```
+
+## Cloud Function Approach

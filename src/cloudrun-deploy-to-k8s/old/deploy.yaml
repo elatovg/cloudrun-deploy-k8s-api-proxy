@@ -17,4 +17,3 @@ spec:
         image: IMAGE
         ports:
           - containerPort: 8000
-
