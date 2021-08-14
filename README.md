@@ -39,7 +39,7 @@ export PROXY_IMAGE_URL=${REPO_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/
 gcloud artifacts docker images list ${PROXY_IMAGE_URL}
 ```
 
-### Deploy a vpc connector for serverless
+### Deploy a VPC connector for serverless
 More info [here](https://cloud.google.com/vpc/docs/configure-serverless-vpc-access). First let's create a dedicated subnet for the vpc connector:
 
 ```bash
@@ -60,8 +60,8 @@ Now let's create the connector:
 gcloud services enable vpcaccess.googleapis.com
 export VPC_CONNECTOR_NAME="cloud-run-connector"
 
-gcloud compute networks vpc-access connectors create ${VPC_CONNECTOR_NAME} --region ${REGION} \
---subnet ${SUBNET} --subnet-project HOST_PROJECT_ID \
+gcloud compute networks vpc-access connectors create ${VPC_CONNECTOR_NAME} \
+  --region ${REGION} --subnet ${SUBNET} --subnet-project HOST_PROJECT_ID 
 ```
 
 Add the subnet to the authorized networks for the GKE cluster:
@@ -92,13 +92,11 @@ gcloud dns record-sets transaction start --zone ${UDOMAIN}
 
 # create the A record
 gcloud dns record-sets transaction add 199.36.153.8 199.36.153.9 199.36.153.10 199.36.153.11 \
-  --name "private.${DOMAIN}." \
-  --ttl 300 --type A --zone "${UDOMAIN}"
+  --name "private.${DOMAIN}." --ttl 300 --type A --zone "${UDOMAIN}"
 
 # create the CNAME record
 gcloud dns record-sets transaction add \
-  "private.${DOMAIN}." --name \*.${DOMAIN}. \
-  --ttl 300 --type CNAME --zone ${UDOMAIN}
+  "private.${DOMAIN}." --name \*.${DOMAIN}. --ttl 300 --type CNAME --zone ${UDOMAIN}
 
 gcloud dns record-sets transaction execute --zone "${UDOMAIN}"
 ```
@@ -114,20 +112,17 @@ export VPC_NAME="spoke"
 # create the zone
 gcloud dns managed-zones \
   create ${UDOMAIN} --description "" \
-  --dns-name "${DOMAIN}." --visibility "private" \
-  --networks "${VPC_NAME}"
+  --dns-name "${DOMAIN}." --visibility "private" --networks "${VPC_NAME}"
 
 
 gcloud dns record-sets transaction start --zone ${UDOMAIN}
 
 # create the A record
 gcloud dns record-sets transaction add 199.36.153.8 199.36.153.9 199.36.153.10 199.36.153.11 \
-  --name "${DOMAIN}." \
-  --ttl 300 --type A --zone "${UDOMAIN}"
+  --name "${DOMAIN}." --ttl 300 --type A --zone "${UDOMAIN}"
 
 # create the CNAME record
-gcloud dns record-sets transaction add \
-  "${DOMAIN}." --name \*.${DOMAIN}. \
+gcloud dns record-sets transaction add "${DOMAIN}." --name \*.${DOMAIN}. \
   --ttl 300 --type CNAME --zone ${UDOMAIN}
 
 gcloud dns record-sets transaction execute --zone "${UDOMAIN}"
@@ -138,9 +133,8 @@ If you don't a route to the default-internet-gateway for the DNS servers, add th
 ```bash
 export VPC_NAME="spoke"
 gcloud compute routes create access-googleapis \
-    --network ${VPC_NAME} --destination-range 199.36.153.8/30 \
-    --next-hop-gateway default-internet-gateway \
-    --priority 90
+  --network ${VPC_NAME} --destination-range 199.36.153.8/30 \
+  --next-hop-gateway default-internet-gateway --priority 90
 ```
 
 ### Create a pubsub topic
@@ -177,11 +171,8 @@ export VPC_CONNECTOR_NAME="cloud-run-connector"
 
 gcloud run deploy ${CLOUD_RUN_SVC_NAME} --image ${CLOUDRUN_IMAGE_URL} \
   --port 8000 --set-env-vars "PROJECT_ID=${PROJECT_ID}","ZONE=${GKE_ZONE}","GKE_CLUSTER_NAME=${GKE_NAME}","K8S_API_PROXY_IMAGE=${PROXY_IMAGE_URL}" \
-  --vpc-connector ${VPC_CONNECTOR_NAME} \
-  --vpc-egress all-traffic \
-  --platform managed \
-  --region ${GKE_REGION} \
-  --ingress all
+  --vpc-connector ${VPC_CONNECTOR_NAME} --vpc-egress all-traffic \
+  --platform managed --region ${GKE_REGION} --ingress all
 ```
 
 That will show you the link for the cloudrun instance, then you can run the following to kick it off:
@@ -228,10 +219,8 @@ export VPC_CONNECTOR_NAME="cloud-run-connector"
 
 gcloud functions deploy ${CLOUD_FN_NAME} --runtime python39 \
   --set-env-vars "PROJECT_ID=${PROJECT_ID},ZONE=${GKE_ZONE},GKE_CLUSTER_NAME=${GKE_CLUSTER_NAME},K8S_API_PROXY_IMAGE=${PROXY_IMAGE_URL}" \
-  --trigger-topic ${PUBSUB_TOPIC} --entry-point  main \
-  --region ${REGION} --source ${SRC_PATH} \
-  --vpc-connector ${VPC_CONNECTOR_NAME} \
-  --egress-settings all \
+  --trigger-topic ${PUBSUB_TOPIC} --entry-point main --region ${REGION} \ 
+  --source ${SRC_PATH} --vpc-connector ${VPC_CONNECTOR_NAME} --egress-settings all \
   --ingress-settings all
 ```
 
@@ -257,4 +246,23 @@ And to get the IP, you can run the following:
 export PUBSUB_TOPIC="k8s-api-proxy"
 gcloud pubsub topics publish ${PUBSUB_TOPIC} \
   --message "get-svc-ip"
+```
+
+You can then check out the logs:
+
+```bash
+> gcloud functions logs read deploy-proxy --region ${REGION}
+LEVEL  NAME          EXECUTION_ID  TIME_UTC                 LOG
+D      deploy-proxy  mfvgl08ld897  2021-08-14 18:38:07.989  Function execution took 234 ms, finished with status: 'ok'
+       deploy-proxy  mfvgl08ld897  2021-08-14 18:38:07.988  ILB IP is 100.126.190.42
+       deploy-proxy  mfvgl08ld897  2021-08-14 18:38:07.760  Attempting to init k8s client from cluster response.
+       deploy-proxy  mfvgl08ld897  2021-08-14 18:38:07.760  This Function was triggered by messageId 2812274547199873 published at 2021-08-14T18:38:06.680Z to projects/PROJECT_ID/topics/k8s-api-proxy
+D      deploy-proxy  mfvgl08ld897  2021-08-14 18:38:07.756  Function execution started
+D      deploy-proxy  mfvg6zgdj9gq  2021-08-14 18:36:47.055  Function execution took 2406 ms, finished with status: 'ok'
+       deploy-proxy  mfvg6zgdj9gq  2021-08-14 18:36:47.051  Creation Finished
+       deploy-proxy  mfvg6zgdj9gq  2021-08-14 18:36:47.049  [INFO] service `k8s-api-proxy` created
+       deploy-proxy  mfvg6zgdj9gq  2021-08-14 18:36:46.842  [INFO] deployment k8s-api-proxy created
+       deploy-proxy  mfvg6zgdj9gq  2021-08-14 18:36:46.585  Attempting to init k8s client from cluster response.
+       deploy-proxy  mfvg6zgdj9gq  2021-08-14 18:36:46.584  This Function was triggered by messageId 2812274399922080 published at 2021-08-14T18:36:43.706Z to projects/PROJECT_ID/topics/k8s-api-proxy
+D      deploy-proxy  mfvg6zgdj9gq  2021-08-14 18:36:44.650  Function execution started
 ```
