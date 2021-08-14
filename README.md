@@ -145,7 +145,8 @@ gcloud compute routes create access-googleapis \
 
 ### Create a pubsub topic
 ```bash
-gcloud pubsub topics create k8s-api-proxy
+export PUBSUB_TOPIC="k8s-api-proxy"
+gcloud pubsub topics create ${PUBSUB_TOPIC}
 ```
 
 ## Cloud Run Approach
@@ -205,3 +206,39 @@ success%
 ```
 
 ## Cloud Function Approach
+
+### Mirror Github Repo to Cloud Source Repositories
+All the instructions are laid out in [Mirroring a GitHub repository](https://cloud.google.com/source-repositories/docs/mirroring-a-github-repository)
+
+### Create the cloud function
+
+```bash
+export PROJECT_ID=$(gcloud config list --format 'value(core.project)')
+export REGION="us-central1"
+export GKE_ZONE="us-central1-c"
+export GKE_CLUSTER_NAME="private-cluster"
+export REPO_REGION="us-east4"
+export REPO_NAME="tools"
+export PROXY_IMAGE_URL="${REPO_REGION}-docker.pkg.dev/${PROJECT_ID}/${REPO_NAME}/${PROXY_IMAGE}"
+export PUBSUB_TOPIC="k8s-api-proxy"
+export CLOUD_SOURCE_REPO="github_elatovg_cloudrun-deploy-k8s-api-proxy"
+export SRC_PATH="https://source.developers.google.com/projects/${PROJECT_ID}/repos/${CLOUD_SOURCE_REPO}/moveable-aliases/main/paths/src/cloudfn/app"
+export CLOUD_FN_NAME="deploy-proxy"
+export VPC_CONNECTOR_NAME="cloud-run-connector"
+
+gcloud functions deploy ${CLOUD_FN_NAME} --runtime python39 \
+  --set-env-vars "PROJECT_ID=${PROJECT_ID},ZONE=${GKE_ZONE},GKE_CLUSTER_NAME=${GKE_CLUSTER_NAME},K8S_API_PROXY_IMAGE=${PROXY_IMAGE_URL}" \
+  --trigger-topic ${PUBSUB_TOPIC} --entry-point  main \
+  --region ${REGION} --source ${SRC_PATH} \
+  --vpc-connector ${VPC_CONNECTOR_NAME} \
+  --egress-settings all \
+  --ingress-settings all
+```
+
+To trigger the function, publish a message to the pubsub topic:
+
+```bash
+export PUBSUB_TOPIC="k8s-api-proxy"
+gcloud pubsub topics publish ${PUBSUB_TOPIC} \
+  --message "create"
+```
