@@ -196,7 +196,16 @@ def main(event, context):
         format(context.event_id, context.timestamp, context.resource["name"]))
 
     if 'data' in event:
-        name = base64.b64decode(event['data']).decode('utf-8')
+        action = base64.b64decode(event['data']).decode('utf-8')
     else:
-        name = 'World'
-    print('Hello {}!'.format(name))
+        action = 'create'
+
+    if action == "create":
+        deploy_to_k8s()
+        print("Creation Finished")
+    elif action == "delete":
+        del_from_k8s()
+        print("Deletion Finished")
+    elif action == "get-svc-ip":
+        ip_addr = get_k8s_svc_ip()
+        print(f"ILB IP is {ip_addr}")

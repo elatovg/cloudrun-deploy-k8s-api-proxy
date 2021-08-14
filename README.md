@@ -242,3 +242,19 @@ export PUBSUB_TOPIC="k8s-api-proxy"
 gcloud pubsub topics publish ${PUBSUB_TOPIC} \
   --message "create"
 ```
+
+To delete the deployment you can send the following pubsub message:
+
+```bash
+export PUBSUB_TOPIC="k8s-api-proxy"
+gcloud pubsub topics publish ${PUBSUB_TOPIC} \
+  --message "delete"
+```
+
+And to get the IP, you can run the following:
+
+```bash
+export PUBSUB_TOPIC="k8s-api-proxy"
+gcloud pubsub topics publish ${PUBSUB_TOPIC} \
+  --message "get-svc-ip"
+```
