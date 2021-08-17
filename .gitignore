@@ -1,3 +1,11 @@
 .idea
 .pyc
 .vscode
+
+# Local .terraform directories
+**/.terraform/*
+
+# .tfstate files
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl

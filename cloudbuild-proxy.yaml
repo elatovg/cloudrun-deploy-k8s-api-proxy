@@ -9,7 +9,7 @@ steps:
 
 substitutions:
   _AR_NAME: tools # default value
-  _AR_REGION: us-east4 # default value
+  _AR_REGION: us-central1 # default value
   _IMAGE: k8s-api-proxy # default value
 
 images:
