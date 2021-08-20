@@ -16,4 +16,4 @@ spec:
       - name: k8s-api-proxy
         image: IMAGE
         ports:
-          - containerPort: 8000
+          - containerPort: 8118

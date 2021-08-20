@@ -84,7 +84,7 @@ spec:
       - name: k8s-api-proxy
         image: ${k8s_api_proxy_image}
         ports:
-          - containerPort: 8000
+          - containerPort: 8118
 EOL
 
   ${CAT} >svc.yaml <<EOL

@@ -130,7 +130,7 @@ def deploy_to_k8s():
                         "name": name,
                         "image": "IMAGE",
                         "ports": [{
-                            "containerPort": 8000
+                            "containerPort": 8118
                         }],
                     }]
                 },
